@@ -11,13 +11,16 @@ defmodule PlugMintProxy.MixProject do
       elixir: "~> 1.7",
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      package: package()
+      package: package(),
+      build_path: "../../_build",
+      deps_path: "../../deps",
+      lockfile: "../../mix.lock"
     ]
   end
 
   def application do
     [
-      extra_applications: [:logger, :plug, :cowboy],
+      extra_applications: [:logger],
       mod: {PlugMintProxy, []},
       env: []
     ]
@@ -27,6 +30,7 @@ defmodule PlugMintProxy.MixProject do
   defp deps do
     [
       {:castore, "~> 0.1.0"},
+      {:gun, "~> 2.0.0-rc.2"},
       {:mint, "~> 0.4.0"},
       {:plug, "~> 1.10.4"},
       {:plug_cowboy, "~> 2.4.0"}

@@ -5,9 +5,12 @@ defmodule PlugMintProxyExample do
   plug(:match)
   plug(:dispatch)
 
-  @request_manipulators [Manipulators.DropHostHeader,Manipulators.AddHelloWorldHeader]
+  @request_manipulators [Manipulators.DropHostHeader, Manipulators.AddHelloWorldHeader]
   @response_manipulators [Manipulators.AddHelloWorldHeader]
-  @manipulators ProxyManipulatorSettings.make_settings(@request_manipulators, @response_manipulators)
+  @manipulators ProxyManipulatorSettings.make_settings(
+                  @request_manipulators,
+                  @response_manipulators
+                )
 
   def print_diagnostics() do
     ProxyManipulatorSettings.print_diagnostics(@manipulators)
@@ -36,11 +39,16 @@ defmodule PlugMintProxyExample do
   end
 
   match "/editor-documents/*path" do
-    ConnectionForwarder.forward(conn, path, "http://localhost:8080/editor-documents/", @manipulators)
+    ConnectionForwarder.forward(
+      conn,
+      path,
+      "http://localhost:8080/editor-documents/",
+      @manipulators
+    )
   end
 
   match "/hello/*path" do
-    ConnectionForwarder.forward(conn, path, "https://veeakker.be/",  @manipulators)
+    ConnectionForwarder.forward(conn, path, "https://veeakker.be/", @manipulators)
   end
 
   match "/nieuws/*path" do

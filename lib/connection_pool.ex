@@ -61,12 +61,19 @@ defmodule ConnectionPool do
     connection
     |> EnvLog.inspect(:log_connection_setup, label: "Removing connection")
     |> EnvLog.inspect(:log_connection_pool_processing, label: "Removing connection")
+    |> IO.inspect(label: "connection pool rem")
+
+    IO.inspect(connection_spec, label: "connection_spec")
+
+    IO.inspect(state, label: "before")
 
     new_state =
       state
       |> Map.update(connection_spec, [], fn values ->
         Enum.reject(values, &(&1 == connection))
       end)
+
+    IO.inspect(new_state, label: "after")
 
     {:noreply, new_state}
   end

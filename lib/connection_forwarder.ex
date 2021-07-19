@@ -3,8 +3,8 @@ defmodule ConnectionForwarder do
 
   require Logger
 
-  @type connection_spec :: {:http | :https, String.t(), integer}
-  @type backend_string_info :: {:http | :https, String.t(), integer, String.t()}
+  @type connection_spec :: {:http | :https | :ws | :wss, String.t(), integer}
+  @type backend_string_info :: {:http | :https | :ws | :wss, String.t(), integer, String.t()}
 
   @spec start_link(connection_spec) :: {:ok, pid()} | {:error, any}
   def start_link(connection_spec) do
@@ -20,10 +20,16 @@ defmodule ConnectionForwarder do
   def extract_info_from_backend_string(backend_string) do
     %{host: host, path: base_path, port: port, scheme: string_scheme} = URI.parse(backend_string)
 
+    EnvLog.inspect(backend_string, :log_connection_setup,
+      label: "Could not proxy, trying with a new connection"
+    )
+
     scheme =
       case string_scheme do
         "http" -> :http
         "https" -> :https
+        "ws" -> :ws
+        "wss" -> :wss
         _ -> :unknown
       end
 
@@ -49,7 +55,9 @@ defmodule ConnectionForwarder do
   end
 
   def forward(frontend_conn, extra_path, {scheme, host, port, base_path}, manipulators) do
-    EnvLog.log(:log_proxy_url_on_call, "Proxying to: #{base_path <> Enum.join(extra_path, "/")}")
+    IO.inspect("Proxying to: #{base_path <> Enum.join(extra_path, "/")}",
+      label: "log_proxy_url_on_call"
+    )
 
     frontend_conn =
       frontend_conn
@@ -124,8 +132,10 @@ defmodule ConnectionForwarder do
   end
 
   ## Callbacks
+  ## Create process for handling proxy things to specified backend
   @impl true
   def init({scheme, host, port} = connection_spec) do
+    IO.inspect(connection_spec, label: "init conn forwarder")
     {:ok, conn} = Mint.HTTP.connect(scheme, host, port)
     {:ok, %{backend_host_conn: conn, connection_spec: connection_spec}}
   end
@@ -181,6 +191,8 @@ defmodule ConnectionForwarder do
           |> Map.put(:from, from)
           |> Map.put(:headers_sent, false)
 
+        IO.inspect("Bla bla end here", label: "Mint.HTTP.request")
+
         {:noreply, new_state}
 
       {:error, _conn, reason} ->
@@ -193,7 +205,16 @@ defmodule ConnectionForwarder do
   end
 
   @impl true
+  def handle_info({:tcp_closed, pid}, state) do
+    ConnectionPool.remove_connection(Map.get(state, :connection_spec), self())
+
+    {:stop, :normal, state}
+  end
+
+  @impl true
   def handle_info(message, %{backend_conn: backend_conn} = state) do
+    IO.inspect(message, label: "Mint.HTTP.request")
+
     case Mint.HTTP.stream(backend_conn, message) do
       :unknown ->
         EnvLog.log(:log_backend_communication, "Received unknown TCP message from backend")
@@ -209,9 +230,8 @@ defmodule ConnectionForwarder do
       error = {:error, _, _, _} ->
         EnvLog.inspect(error, :log_connection_failure, "HTTP stream error occurred")
 
-        EnvLog.inspect(
+        IO.inspect(
           error,
-          :log_backend_communication,
           label: "Received erroneous TCP message from backend"
         )
 
@@ -220,7 +240,10 @@ defmodule ConnectionForwarder do
         {:stop, "Received erroneous TCP message from backend", self()}
 
       {:ok, backend_conn, responses} ->
-        EnvLog.log(:log_backend_communication, "Received ok TCP message from backend, processing")
+        IO.inspect(
+          "Received ok TCP message from backend, processing",
+          label: "Received some TCP message from backend"
+        )
 
         new_state =
           state
@@ -229,7 +252,7 @@ defmodule ConnectionForwarder do
         new_state =
           responses
           |> Enum.reduce(new_state, fn chunk, state ->
-            EnvLog.inspect(elem(chunk, 0), :log_backend_communication,
+            IO.inspect(elem(chunk, 0),
               label: "Processing chunk type"
             )
 
@@ -413,6 +436,8 @@ defmodule ConnectionForwarder do
     case Plug.Conn.read_body(conn, read_length: 1000, read_timeout: 15000) do
       {:ok, stuff, conn} ->
         EnvLog.inspect(body, :log_frontend_communication, label: "Full request body")
+        |> IO.inspect(label: "Full request body")
+
         {:done, body <> stuff, conn}
 
       {:more, stuff, conn} ->
